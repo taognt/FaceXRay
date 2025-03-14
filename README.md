@@ -16,7 +16,7 @@ To build the dataset of blended images
 1. Download dlib shape_predictor_68_face_landmarks
 
 ```
-wget http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2
+curl -O https://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2
 ```
 
 2. Extract bz2 file to get .dat file

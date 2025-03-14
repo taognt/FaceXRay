@@ -1,0 +1,14 @@
+dlib
+opencv-python
+tqdm
+scikit-image
+matplotlib
+imgaug
+memory_profiler
+torchvision
+segmentation-models-pytorch
+pandas
+torchmetrics
+lightning[extra]
+numpy==1.26.4
+

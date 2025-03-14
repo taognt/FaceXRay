@@ -15,26 +15,47 @@ import glob
 import os
 import random
 from memory_profiler import profile
-from datetime import datetime
+from datetime import datetime, timezone
 from tqdm import tqdm
 import time
 import argparse
 
+# def name_resolve(path):
+#     print(path)
+#     name = os.path.splitext(os.path.basename(path))[0]
+#     print(name)
+#     if "_" in name:
+#         if 'nm' in name:
+#             vid_id = random.randrange(1000, 5000)
+#             frame_id = random.randrange(1000, 5000)
+#         else:
+#             id_split = name.rindex('_')
+#             end_split = name.rindex('.')
+#             vid_id = name[:id_split]
+#             frame_id = name[id_split+1:end_split] #name.split('_')[0:2]
+#     else:
+#         vid_id = os.path.basename(path)
+#         frame_id = random.randrange(1000, 500000)
+#     return vid_id, int(frame_id)
+
 def name_resolve(path):
     name = os.path.splitext(os.path.basename(path))[0]
+    
     if "_" in name:
         if 'nm' in name:
             vid_id = random.randrange(1000, 5000)
             frame_id = random.randrange(1000, 5000)
         else:
+            # Split by the last underscore, assuming the format is vid_id_frame_id
             id_split = name.rindex('_')
-            end_split = name.rindex('.')
-            vid_id = name[:id_split]
-            frame_id = name[id_split+1:end_split] #name.split('_')[0:2]
+            vid_id = name[:id_split]  # Part before the last underscore is the video ID
+            frame_id = name[id_split+1:]  # Part after the last underscore is the frame ID
     else:
         vid_id = os.path.basename(path)
         frame_id = random.randrange(1000, 500000)
+
     return vid_id, int(frame_id)
+
     
 def total_euclidean_distance(a,b):
     assert len(a.shape) == 2
@@ -94,7 +115,7 @@ def blendImages(src, dst, mask, featherAmount=0.2):
     hull = cv2.convexHull(maskPts)
     dists = np.zeros(maskPts.shape[0])
     for i in range(maskPts.shape[0]):
-        dists[i] = cv2.pointPolygonTest(hull, (maskPts[i, 0], maskPts[i, 1]), True)
+        dists[i] = cv2.pointPolygonTest(hull, (int(maskPts[i, 0]), int(maskPts[i, 1])), True)
 
     weights = np.clip(dists / featherAmount, 0, 1)
 
@@ -149,6 +170,7 @@ class BIOnlineGeneration():
         
         background_face_path = random.choice(self.data_list)
         data_type = 'real' if random.randint(0,1) else 'fake'
+
         
         if data_type == 'fake':
             if 'fake' in background_face_path:
@@ -160,6 +182,7 @@ class BIOnlineGeneration():
         else:
             face_img = io.imread(background_face_path)
             mask = np.zeros((600, 600, 1))
+
         
         # randomly downsample after BI pipeline
         if random.randint(0,1):
@@ -190,11 +213,13 @@ class BIOnlineGeneration():
         return face_img,mask,data_type
         
     def get_blended_face(self,background_face_path):
+        
         background_face = io.imread(background_face_path)
         background_landmark = self.landmarks_record[background_face_path]
-        
+
         foreground_face_path = self.search_similar_face(background_landmark,background_face_path)
         foreground_face = io.imread(foreground_face_path)
+
         
         # down sample before blending
         aug_size = random.randint(128,600)
@@ -228,14 +253,15 @@ class BIOnlineGeneration():
         return blended_face,mask
     
     def search_similar_face(self,this_landmark,background_face_path):
+        
         vid_id, frame_id = name_resolve(background_face_path)
         min_dist = 99999999
         
         # random sample 5000 frame from all frams:
         all_candidate_path = random.sample( self.data_list, k=self.search_sample_k)
-        
-        # filter all frame that comes from the same video as background face
-        all_candidate_path = filter(lambda k:name_resolve(k)[0] != vid_id, all_candidate_path)
+
+        # filter to remove the same frame TODO: if tackling videos, remove frames from the same video with vid_id
+        all_candidate_path = filter(lambda k:name_resolve(k)[1] != frame_id, all_candidate_path)
         all_candidate_path = list(all_candidate_path)
         min_path = background_face_path
         
@@ -249,7 +275,7 @@ class BIOnlineGeneration():
 
         return min_path
 
-def generate_blends(obj, path_suffix='', valid=False):
+def generate_blends(obj, path_suffix='', valid=False, frac=0.1):
     list_size = len(obj.data_list)
     count = 0
     img_paths = []
@@ -259,12 +285,12 @@ def generate_blends(obj, path_suffix='', valid=False):
         extension = '_valid'
     else:
         extension = ''
-    for i in tqdm(range(list_size*5)):
+    for i in tqdm(range(int(list_size*frac))):
        # try:
             img,mask,label = obj.gen_one_datapoint()
             mask = np.repeat(mask,3,2)
             mask = (mask*255).astype(np.uint8)
-            base_name = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')
+            base_name = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S.%f')
             # save masks
             mask_img = Image.fromarray(mask, 'RGB')
             filename = 'blend_dataset' + extension +'/' + label + '_masks/' + str(base_name) + '.jpg'
@@ -291,14 +317,22 @@ def generate_blends(obj, path_suffix='', valid=False):
     
     
 if __name__ == '__main__':
-    #os.system('rm -r real_masks/ fake_masks/ real_imgs/ fake_imgs/')
-    #os.system('mkdir real_masks/ fake_masks/ real_imgs/ fake_imgs/')
+    os.system('rm -r blend_dataset')
+    os.system("mkdir blend_dataset")
+    os.system('rm -r blend_dataset/real_masks/ blend_dataset/fake_masks/ blend_dataset/real_imgs/ blend_dataset/fake_imgs/')
+    os.system('mkdir blend_dataset/real_masks/ blend_dataset/fake_masks/ blend_dataset/real_imgs/ blend_dataset/fake_imgs/')
+
+    os.system('rm -r blend_dataset_valid')
+    os.system("mkdir blend_dataset_valid")
+    os.system('rm -r blend_dataset_valid/real_masks/ blend_dataset_valid/fake_masks/ blend_dataset_valid/real_imgs/ blend_dataset_valid/fake_imgs/')
+    os.system('mkdir blend_dataset_valid/real_masks/ blend_dataset_valid/fake_masks/ blend_dataset_valid/real_imgs/ blend_dataset_valid/fake_imgs/')
+
     parser = argparse.ArgumentParser(description="Generate face blends")
-    parser.add_argument("--path", required=True, help="Path to landmarks.json file")
+    parser.add_argument("--path", required=False, help="Path to landmarks.json file", default="landmarks.json")
     args = parser.parse_args()
     t = time.time()
     ds = BIOnlineGeneration(args.path)
     generate_blends(ds, path_suffix=args.path[-6])
     print("Process completed in hours : " + str((time.time() - t) / (60*60)))
-    #ds_valid = BIOnlineGeneration('landmarks_valid.json')
-    #generate_blends(ds_valid, valid=True)
+    ds_valid = BIOnlineGeneration('landmarks_valid.json')
+    generate_blends(ds_valid, valid=True)

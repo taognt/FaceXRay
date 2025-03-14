@@ -20,10 +20,12 @@ predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
 
 def generate_landmarks(img_dir, skip=1, valid=False):
     filenames = []
-    #if valid:
-    #    img_dir = img_dir + 'val/real/'
-    #else:
-    #    img_dir = img_dir + 'train/real/'
+    if valid:
+       img_dir = img_dir + '/val'
+    else:
+       img_dir = img_dir + '/train'
+
+    print(img_dir)
     for root, dirs, files in os.walk(img_dir):
             for file in files:
                 if file.endswith(".jpg") or file.endswith(".png"):
@@ -65,6 +67,7 @@ def generate_landmarks(img_dir, skip=1, valid=False):
     with open(save_name, 'w') as fp:
         json.dump(landmark_coords, fp)
 
-generate_landmarks(img_dir='dataset/data_train_2020-11-24_09-59-48/', skip=200)
-generate_landmarks(img_dir='dataset/images1024x1024/', skip=1)
-#generate_landmarks(valid=True)
+generate_landmarks(img_dir='images/Real', skip=1)
+# generate_landmarks(img_dir='dataset/data_train_2020-11-24_09-59-48/', skip=200)
+# generate_landmarks(img_dir='dataset/images1024x1024/', skip=1)
+generate_landmarks(img_dir='images/Real', valid=True)
