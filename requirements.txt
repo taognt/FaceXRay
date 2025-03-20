@@ -1,4 +1,3 @@
-dlib
 opencv-python
 tqdm
 scikit-image
@@ -11,4 +10,6 @@ pandas
 torchmetrics
 lightning[extra]
 numpy==1.26.4
-
+datasets==3.4.1
+scikit-learn==1.6.1
+seaborn==0.13.2

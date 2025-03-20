@@ -5,3 +5,9 @@
 **/*.pyc
 **/venv/
 **/.DS_Store
+**/.env
+lightning_logs/
+checkpoints/
+__MACOSX/
+**/myenv/
+**/output_data

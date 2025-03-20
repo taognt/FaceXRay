@@ -1,6 +1,5 @@
 import pickle
-import os
-from torchvision import transforms
+from torchvision import datasets, models, transforms
 import segmentation_models_pytorch as smp
 from PIL import Image
 import numpy as np
@@ -8,37 +7,35 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
+from torchvision import transforms
 import pytorch_lightning as pl
-from torchmetrics import Accuracy, F1Score
+from torchmetrics.functional.classification import accuracy, f1_score
+import itertools
+from pytorch_lightning.callbacks import ModelCheckpoint
 import imgaug as ia
 import imgaug.augmenters as iaa
-from pytorch_lightning.callbacks import ModelCheckpoint
+import os
 from pandas.core.common import flatten
 
-# Dataset loading and preprocessing
+# NVIDIA H100 has Tensor Cores which can improve performance, to enable:
+torch.set_float32_matmul_precision('high')  # 'medium' or 'high' for best speed
+
 img_paths_train = []
 mask_paths_train = []
 img_labels_train = []
 
 all_paths_dir = 'blend_dataset/'
 all_paths_filenames = []
-
 for root, dirs, files in os.walk(all_paths_dir):
     for file in files:
         if file.endswith(".pkl"):
             all_paths_filenames.append(os.path.join(root, file))
 
-print("all path filename: ", all_paths_filenames)
-
-# Loading dataset
 img_paths_train = []
 mask_paths_train = []
 img_labels_train = []
-
-print("all path filename: ", all_paths_filenames[:-1])
 for train_path in all_paths_filenames[:-1]:
     with open(train_path, 'rb') as alp:
-        print(f"Loading {train_path}")
         all_paths_splits = pickle.load(alp)
         img_paths_train.append(all_paths_splits['image paths'])
         mask_paths_train.append(all_paths_splits['mask paths'])
@@ -48,85 +45,79 @@ img_paths_train = list(flatten(img_paths_train))
 mask_paths_train = list(flatten(mask_paths_train))
 img_labels_train = list(flatten(img_labels_train))
 
-print("all path filename valid: ", all_paths_filenames[:-1])
 with open(all_paths_filenames[-1], 'rb') as alp:
     all_paths_splits = pickle.load(alp)
     img_paths_valid = all_paths_splits['image paths']
     mask_paths_valid = all_paths_splits['mask paths']
     img_labels_valid = all_paths_splits['image labels']
 
-print("\n\n--------------\n\n")
 print("Total training samples : ", len(img_paths_train))
 print("Total validation samples : ", len(img_paths_valid))
 
-# Dataset class definition
 class Dataset(torch.utils.data.Dataset):
+    'Characterizes a dataset for PyTorch'
     def __init__(self, img_paths, mask_paths, img_labels):
+        'Initialization'
         self.img_paths = img_paths
         self.mask_paths = mask_paths
         self.img_labels = img_labels
-        # Combining torch transforms with imgaug augmentations
-        self.imgaug = iaa.Sequential([
-            iaa.Fliplr(0.5),  # Horizontal flip
-            iaa.Affine(rotate=(-20, 20)),  # Rotation
-            iaa.AdditiveGaussianNoise(scale=(0, 0.1*255))  # Noise
-        ])
         self.transform_img = transforms.Compose([
-            transforms.Resize((528, 528)),
+            transforms.Resize((528,528)),
+            #transforms.CenterCrop(528),
             transforms.ColorJitter(hue=.05, saturation=.05),
             transforms.RandomHorizontalFlip(),
+            # transforms.RandomRotation(20, resample=Image.BILINEAR),
             transforms.RandomRotation(20),
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])
         self.transform_mask = transforms.Compose([
-            transforms.Resize((528, 528)),
+            transforms.Resize((528,528)),
+            #transforms.CenterCrop(528),
             transforms.ToTensor(),
             transforms.Normalize([0.456], [0.224])
         ])
 
     def __len__(self):
+        'Denotes the total number of samples'
         return len(self.img_labels)
 
     def __getitem__(self, index):
-        image = Image.open(self.img_paths[index])
-        mask = Image.open(self.mask_paths[index]).convert('L')
+        'Generates one sample of data'
+        image = self.transform_img(Image.open(self.img_paths[index]))
+        mask = self.transform_mask(Image.open(self.mask_paths[index]).convert('L'))
 
-        # Apply imgaug augmentation
-        image = np.array(image)
-        image = self.imgaug(image=image)  # Apply imgaug augmentation
-        image = Image.fromarray(image)
-
-        image = self.transform_img(image)
-        mask = self.transform_mask(mask)
-
-        value = 1 if self.img_labels[index] == 'fake' else 0
+        if self.img_labels[index] == 'fake':
+            value = 1
+        else:
+            value = 0
 
         return image, mask, value
 
-# Create datasets and dataloaders
 train_dataset = Dataset(img_paths_train, mask_paths_train, img_labels_train)
 valid_dataset = Dataset(img_paths_valid, mask_paths_valid, img_labels_valid)
+num_workers = min(8, os.cpu_count() // 2)  # Limits workers to 8 max
+train = DataLoader(train_dataset, batch_size=6, num_workers=num_workers,
+        drop_last=True)
+valid = DataLoader(valid_dataset, batch_size=6, num_workers=num_workers,
+        drop_last=True)
 
-train = DataLoader(train_dataset, batch_size=6, num_workers=4, drop_last=True)
-valid = DataLoader(valid_dataset, batch_size=6, num_workers=4, drop_last=True)
-
-
-# Classifier definition using PyTorch Lightning
 class Classifier(pl.LightningModule):
 
     def __init__(self):
         super().__init__()
-        aux_params = dict(
-            pooling='max',             
-            dropout=0.5,               
-            activation='sigmoid',      
-            classes=1,                 
+        # Resnet config
+        aux_params=dict(
+            pooling='max',             # one of 'avg', 'max'
+            dropout=0.5,               # dropout ratio, default is None
+            activation='sigmoid',      # activation function, default is None
+            classes=1,                 # define number of output labels
         )
         self.model = smp.DeepLabV3Plus(encoder_name="efficientnet-b6", encoder_weights="imagenet", in_channels=3, classes=1, aux_params=aux_params)
-        # Metrics
-        self.accuracy = Accuracy(task='binary')
-        self.f1_score = F1Score(task='binary')
+        
+        # Initialize storage for outputs
+        self.train_outputs = []
+        self.valid_outputs = []
 
     def forward(self, image):
         output_mask, output_target = self.model(image)
@@ -134,11 +125,11 @@ class Classifier(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         image, mask, target = batch
-        output_mask, output_target = self.model(image)
+        output_mask, output_target = self.model(image) #F.interpolate(self.resnet(image), size=64)
         mask_loss = F.mse_loss(output_mask, mask)
-        class_loss = F.binary_cross_entropy_with_logits(output_target.squeeze(), target.type(torch.float32).cuda())
+        #bce_loss = nn.BCEWithLogitsLoss()
+        class_loss = F.binary_cross_entropy_with_logits(output_target.squeeze(), target.type(torch.DoubleTensor).cuda())
         loss = mask_loss + class_loss
-
         result_dict = {
             'class_loss': class_loss,
             'mask_loss': mask_loss,
@@ -146,16 +137,20 @@ class Classifier(pl.LightningModule):
             'targets': target,
             'total_loss': loss
         }
+        if not hasattr(self, 'train_outputs'):
+            self.train_outputs = []  # Initialize storage
 
+        self.train_outputs.append(result_dict)  # Store for epoch end
         return {'loss': loss, 'result': result_dict}
+
 
     def validation_step(self, batch, batch_idx):
         image, mask, target = batch
-        output_mask, output_target = self.model(image)
+        output_mask, output_target = self.model(image) #F.interpolate(self.resnet(image), size=64)
         mask_loss = F.mse_loss(output_mask, mask)
-        class_loss = F.binary_cross_entropy_with_logits(output_target.squeeze(), target.type(torch.float32).cuda())
+        #print('Mask Loss:', mask_loss)
+        class_loss = F.binary_cross_entropy_with_logits(output_target.squeeze(), target.type(torch.DoubleTensor).cuda())
         loss = mask_loss + class_loss
-
         result_dict = {
             'class_loss': class_loss,
             'mask_loss': mask_loss,
@@ -164,20 +159,52 @@ class Classifier(pl.LightningModule):
             'total_loss': loss
         }
 
+        self.valid_outputs.append(result_dict)
         return result_dict
 
-    def on_train_epoch_end(self, train_outputs):
-        outputs = [x['result'] for x in train_outputs]
+    # def training_epoch_end(self, train_outputs):
+    #     '''
+    #     Log all the values after the end of the epoch.
+    #     '''
+    #     outputs = [x['result'] for x in train_outputs]
+
+    #     avg_class_loss = torch.stack([x['class_loss'] for x in outputs]).mean()
+    #     avg_mask_loss = torch.stack([x['mask_loss'] for x in outputs]).mean()
+    #     avg_loss = torch.stack([x['total_loss'] for x in outputs]).mean()
+
+    #     all_predictions = torch.stack(
+    #         [x['predictions'] for x in outputs]).flatten()
+    #     all_targets = torch.stack([x['targets'] for x in outputs]).flatten()
+
+    #     class_accuracy = accuracy(all_predictions, all_targets, task="binary")
+    #     class_f1 = f1_score(all_predictions, all_targets, task="binary")
+
+    #     self.log('train_class_loss', avg_class_loss)
+    #     self.log('train_mask_loss', avg_mask_loss)
+    #     self.log('train_loss', avg_loss)
+    #     self.log('train_accuracy', class_accuracy, prog_bar=True)
+    #     self.log('train_f1', class_f1)
+
+    def on_train_epoch_end(self):
+        '''
+        Log all the values after the end of the epoch.
+        '''
+        if not self.train_outputs:
+            print(f"No train outputs.\n")
+            return
+        
+        outputs = self.train_outputs  # Access stored outputs
 
         avg_class_loss = torch.stack([x['class_loss'] for x in outputs]).mean()
         avg_mask_loss = torch.stack([x['mask_loss'] for x in outputs]).mean()
         avg_loss = torch.stack([x['total_loss'] for x in outputs]).mean()
 
-        all_predictions = torch.stack([x['predictions'] for x in outputs]).flatten()
+        all_predictions = torch.stack(
+            [x['predictions'] for x in outputs]).flatten()
         all_targets = torch.stack([x['targets'] for x in outputs]).flatten()
 
-        class_accuracy = self.accuracy(all_predictions, all_targets)
-        class_f1 = self.f1_score(all_predictions, all_targets)
+        class_accuracy = accuracy(all_predictions, all_targets, task="binary")
+        class_f1 = f1_score(all_predictions, all_targets, task="binary")
 
         self.log('train_class_loss', avg_class_loss)
         self.log('train_mask_loss', avg_mask_loss)
@@ -185,22 +212,58 @@ class Classifier(pl.LightningModule):
         self.log('train_accuracy', class_accuracy, prog_bar=True)
         self.log('train_f1', class_f1)
 
-    def on_validation_epoch_end(self, outputs):
+        self.train_outputs = []  # Clear stored outputs for the next epoch
+
+
+    # def validation_epoch_end(self, outputs):
+    #     '''
+    #     Log all the values after the end of the epoch.
+    #     '''
+
+    #     avg_class_loss = torch.stack([x['class_loss'] for x in outputs]).mean()
+    #     avg_mask_loss = torch.stack([x['mask_loss'] for x in outputs]).mean()
+    #     avg_loss = torch.stack([x['total_loss'] for x in outputs]).mean()
+
+    #     all_predictions = torch.stack(
+    #         [x['predictions'] for x in outputs]).flatten()
+    #     all_targets = torch.stack([x['targets'] for x in outputs]).flatten()
+
+    #     class_accuracy = accuracy(all_predictions, all_targets, task="binary")
+    #     class_f1 = f1_score(all_predictions, all_targets, task="binary")
+
+    #     self.log('valid_class_loss', avg_class_loss)
+    #     self.log('valid_mask_loss', avg_mask_loss)
+    #     self.log('valid_loss', avg_loss)
+    #     self.log('valid_accuracy', class_accuracy, prog_bar=True)
+    #     self.log('valid_f1', class_f1)
+
+    def on_validation_epoch_end(self):
+        '''
+        Log all the values after the end of the epoch.
+        '''
+        if not self.valid_outputs:
+            print(f"No valid outputs.\n")
+            return
+            
+        outputs = self.valid_outputs
         avg_class_loss = torch.stack([x['class_loss'] for x in outputs]).mean()
         avg_mask_loss = torch.stack([x['mask_loss'] for x in outputs]).mean()
         avg_loss = torch.stack([x['total_loss'] for x in outputs]).mean()
 
-        all_predictions = torch.stack([x['predictions'] for x in outputs]).flatten()
+        all_predictions = torch.stack(
+            [x['predictions'] for x in outputs]).flatten()
         all_targets = torch.stack([x['targets'] for x in outputs]).flatten()
 
-        class_accuracy = self.accuracy(all_predictions, all_targets)
-        class_f1 = self.f1_score(all_predictions, all_targets)
+        class_accuracy = accuracy(all_predictions, all_targets, task="binary")
+        class_f1 = f1_score(all_predictions, all_targets, task="binary")
 
         self.log('valid_class_loss', avg_class_loss)
         self.log('valid_mask_loss', avg_mask_loss)
         self.log('valid_loss', avg_loss)
         self.log('valid_accuracy', class_accuracy, prog_bar=True)
         self.log('valid_f1', class_f1)
+
+        self.valid_outputs = []  # Clear stored outputs for the next epoch
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
@@ -215,44 +278,24 @@ class Classifier(pl.LightningModule):
         )
         return [optimizer], [scheduler]
 
+# init model
+model = Classifier()
+checkpoint_callback = ModelCheckpoint(
+    monitor='valid_loss', dirpath='checkpoints/')
 
-# Ensure this is placed at the bottom of your script
-if __name__ == "__main__":
-    # Your model training code here
+# Initialize a trainer
 
-    model = Classifier()  # Initialize the model
+try:
+    trainer = pl.Trainer(gpus=1, max_epochs=15, progress_bar_refresh_rate=20, 
+                     precision=16, callbacks=[checkpoint_callback])
+except:
+    trainer = pl.Trainer(max_epochs=15, 
+                     enable_progress_bar=True,  # Enables the progress bar
+                     precision=16, 
+                     callbacks=[checkpoint_callback])
 
-    # checkpoint_callback = ModelCheckpoint(
-    #     monitor='valid_loss', dirpath='checkpoints/', save_top_k=1, mode='min', verbose=True)
+# Train the model ⚡
+trainer.fit(model, train, valid)
 
-    checkpoint_callback = ModelCheckpoint(
-        monitor="valid_loss",
-        dirpath="checkpoints/",
-        save_top_k=1,
-        mode="min",
-        verbose=True
-    )
-    
-    # trainer = pl.Trainer(
-    #     accelerator='mps',  # Use MPS on MacOS (Apple M1/M2 chip)
-    #     max_epochs=15,
-    #     precision="16",
-    #     callbacks=[checkpoint_callback],
-    #     enable_progress_bar=True
-    # )
-
-    trainer = pl.Trainer(
-        accelerator="mps",  
-        devices=1,          
-        precision="bf16-mixed",  # Use bf16 for better MPS compatibility
-        max_epochs=15,
-        callbacks=[checkpoint_callback],
-        enable_progress_bar=True
-    )
-
-
-
-    trainer.fit(model, train, valid)
-    input("Continue ?")
-    # Save model checkpoint
-    trainer.save_checkpoint("final_model.ckpt")
+#Save and checkpoint
+trainer.save_checkpoint("output_data/final_model.ckpt")
