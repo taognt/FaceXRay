@@ -28,7 +28,10 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 model.to(device)
 
 # Test inference
-def inference(image, model, device=None, transform=transform_img, output_path="output_data"):
+def inference(image, model, device=None, transform=transform_img, output_path="output_data", save=False):
+
+    if save:
+        os.makedirs(output_path, exist_ok=True)
 
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -58,11 +61,11 @@ def inference(image, model, device=None, transform=transform_img, output_path="o
     predicted_class = 1 if predicted_prob >= 0.55 else 0
     
     # Save mask
-    fake_mask_output_dir = os.path.join(output_path, 'inference_mask')
-    os.makedirs(fake_mask_output_dir, exist_ok=True)
-
-    filename = f"fake_mask_test.png"
-    visualize_and_save(image_tensor.squeeze(0), output_mask.squeeze(0), filename, fake_mask_output_dir)
+    if save:
+        fake_mask_output_dir = os.path.join(output_path, 'inference_mask')
+        os.makedirs(fake_mask_output_dir, exist_ok=True)
+        filename = f"fake_mask_test.png"
+        visualize_and_save(image_tensor.squeeze(0), output_mask.squeeze(0), filename, fake_mask_output_dir)
 
     # Print results
     print(f"Actual label: {'Fake' if label == 1 else 'Real'}")
