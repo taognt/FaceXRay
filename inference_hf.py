@@ -74,11 +74,11 @@ def inference(image, model, device=None, transform=transform_img, output_path="o
 
 
 # Test image
-# k = 200
-# ds = ds_load_dataset("Supervache/deepfake_celebaHQ") # Used for test
-# e4s_images = ds.filter(lambda x: x['model'] == 'e4s', load_from_cache_file=False)
-# ds = e4s_images['train']
-# image_data = ds[k]['image']
-# label = ds[k]['fake']
+k = 200
+ds = ds_load_dataset("Supervache/deepfake_celebaHQ") # Used for test
+e4s_images = ds.filter(lambda x: x['model'] == 'e4s', load_from_cache_file=False)
+ds = e4s_images['train']
+image_data = ds[k]['image']
+label = ds[k]['fake']
 
-# inference(image_data, model, device=device)
+inference(image_data, model, device=device)

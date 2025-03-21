@@ -64,7 +64,7 @@ def visualize_and_save(image_tensor, mask_tensor, filename, output_dir='output_m
     ax[0].set_title("Original Image")
     ax[0].axis("off")
 
-    ax[1].imshow(mask, cmap="jet", alpha=0.7)  # Apply colormap
+    ax[1].imshow(mask, alpha=0.7)  # Apply colormap
     ax[1].set_title("Predicted Mask")
     ax[1].axis("off")
 
