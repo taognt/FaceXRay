@@ -1,7 +1,7 @@
 import torch
-from facexray.classifier import Classifier  # Your custom model class
-from facexray.dataset import transform_img
-from code.utils import visualize_and_save
+from .facexray.classifier import Classifier  # Your custom model class
+from .facexray.dataset import transform_img
+from .code.utils import visualize_and_save
 from datasets import load_dataset as ds_load_dataset
 import os
 from torchvision import transforms
@@ -28,7 +28,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 model.to(device)
 
 # Test inference
-def inference(image, model, device=None, transform=transform_img, output_path="output_data", save=False):
+def inference(image, model, device=None, transform=transform_img, output_path="output_data", save=False, verbose=True):
 
     if save:
         os.makedirs(output_path, exist_ok=True)
@@ -67,10 +67,15 @@ def inference(image, model, device=None, transform=transform_img, output_path="o
         filename = f"fake_mask_test.png"
         visualize_and_save(image_tensor.squeeze(0), output_mask.squeeze(0), filename, fake_mask_output_dir)
 
+    mask_numpy = output_mask.squeeze().cpu().detach().numpy()
+
+    return mask_numpy, predicted_class
+
     # Print results
-    print(f"Actual label: {'Fake' if label == 1 else 'Real'}")
-    print(f"Predicted class: {'Fake' if predicted_class == 1 else 'Real'}")
-    print(f"Confidence Score: {predicted_prob:.4f}")
+    if verbose:
+        print(f"Actual label: {'Fake' if label == 1 else 'Real'}")
+        print(f"Predicted class: {'Fake' if predicted_class == 1 else 'Real'}")
+        print(f"Confidence Score: {predicted_prob:.4f}")
 
 
 # Test image

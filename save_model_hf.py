@@ -1,6 +1,6 @@
 import torch
 from pytorch_lightning import Trainer
-from facexray.classifier import Classifier
+from .facexray.classifier import Classifier
 from huggingface_hub import upload_file
 
 # Load the checkpoint
