@@ -12,8 +12,8 @@ torch.save(model.state_dict(), "output_data/final_model.pt")
 
 # Upload the PyTorch model (.pt file)
 upload_file(
-    path_or_fileobj="final_model.pt",  # Path to your model file
-    path_in_repo="pytorch_model.bin",  # Name of the model file on the repo
-    repo_id="TaoGnt/FaceXRay",  # Model repository on Hugging Face
+    path_or_fileobj="final_model.pt",
+    path_in_repo="pytorch_model.bin",
+    repo_id="TaoGnt/FaceXRay", 
     repo_type="model"  # Type of repository (model)
 )

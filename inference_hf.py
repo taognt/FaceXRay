@@ -36,9 +36,9 @@ def inference(image, model, device=None, transform=transform_img, output_path="o
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
     
-    # Convert image to RGB if it has an alpha channel (RGBA)
-    if isinstance(image, Image.Image):  # Check if it's a PIL image
-        image = image.convert("RGB")  # Remove alpha channel
+    # Convert image to RGB if it has RGBA
+    if isinstance(image, Image.Image): 
+        image = image.convert("RGB") 
 
     # Set model to evaluation mode (important for inference)
     model.eval()
@@ -69,21 +69,21 @@ def inference(image, model, device=None, transform=transform_img, output_path="o
 
     mask_numpy = output_mask.squeeze().cpu().detach().numpy()
 
-    return mask_numpy, predicted_class
-
     # Print results
     if verbose:
         print(f"Actual label: {'Fake' if label == 1 else 'Real'}")
         print(f"Predicted class: {'Fake' if predicted_class == 1 else 'Real'}")
         print(f"Confidence Score: {predicted_prob:.4f}")
 
+    return mask_numpy, predicted_class
+
 
 # Test image
-k = 200
-ds = ds_load_dataset("Supervache/deepfake_celebaHQ") # Used for test
-e4s_images = ds.filter(lambda x: x['model'] == 'e4s', load_from_cache_file=False)
-ds = e4s_images['train']
-image_data = ds[k]['image']
-label = ds[k]['fake']
+# k = 200
+# ds = ds_load_dataset("Supervache/deepfake_celebaHQ") # Used for test
+# e4s_images = ds.filter(lambda x: x['model'] == 'e4s', load_from_cache_file=False)
+# ds = e4s_images['train']
+# image_data = ds[k]['image']
+# label = ds[k]['fake']
 
-inference(image_data, model, device=device)
+# inference(image_data, model, device=device)

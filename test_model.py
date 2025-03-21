@@ -8,7 +8,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
-from torchmetrics.functional.classification import accuracy, f1_score
+# from torchmetrics.functional.classification import accuracy
 import itertools
 from pytorch_lightning.callbacks import ModelCheckpoint
 import imgaug as ia
@@ -22,27 +22,20 @@ import statistics
 import argparse
 from pathlib import Path
 from sklearn.metrics import confusion_matrix
-import os
 from matplotlib import pyplot as plt
 import seaborn as sns
 import cv2
 from datasets import concatenate_datasets
 from tqdm import tqdm
-
-from PIL import Image
 from collections import Counter
-import matplotlib.pyplot as plt
 
-
-from .facexray.classifier import Classifier
-from .facexray.dataset import transform_img, DatasetTest
-from .code.utils import visualize_and_save
+from facexray.classifier import Classifier
+from facexray.dataset import transform_img, DatasetTest
+from code.utils import visualize_and_save
 
 # NVIDIA H100 has Tensor Cores which can improve performance, to enable:
 torch.set_float32_matmul_precision('high')  # 'medium' or 'high' for best speed
 num_workers = min(8, os.cpu_count() // 2)  # Limits workers to 8 max
-
-
 
 
 # Threshold evaluation
@@ -79,39 +72,6 @@ def most_represented_number(values):
     most_common_value, _ = count.most_common(1)[0]
     
     return most_common_value
-
-# def visualize_and_save(image_tensor, mask_tensor, filename, output_dir='output_masks'):
-#     """
-#     Function to visualize and save the image with its predicted mask.
-#     """
-#     # Ensure output directory exists
-#     os.makedirs(output_dir, exist_ok=True)
-
-#     # Convert tensors to CPU and detach
-#     image = image_tensor.cpu().detach()
-#     mask = mask_tensor.cpu().detach()
-
-#     # Convert image tensor to numpy array
-#     image = image.permute(1, 2, 0).numpy()  # Move channels to last dimension
-#     image = (image - image.min()) / (image.max() - image.min())  # Normalize for visualization
-
-#     # Convert mask tensor to numpy array
-#     mask = mask.squeeze().numpy()  # Remove batch dimension
-
-#     # Display and save the image and mask
-#     fig, ax = plt.subplots(1, 2, figsize=(10, 5))
-#     ax[0].imshow(image)
-#     ax[0].set_title("Original Image")
-#     ax[0].axis("off")
-
-#     ax[1].imshow(mask, cmap="jet", alpha=0.7)  # Apply colormap
-#     ax[1].set_title("Predicted Mask")
-#     ax[1].axis("off")
-
-#     filepath = os.path.join(output_dir, filename)
-#     plt.savefig(filepath)
-#     plt.close()
-
 
 def visualize_and_save_contour(image_tensor, mask_tensor, filename, output_dir='output_masks'):
     """
@@ -184,7 +144,8 @@ def eval(model, dataloader, device, output_path=None, model_to_test='e4s', data=
                 output_mask, output_target = model(image)
                 
                 # Convert logits to probabilities
-                predicted_probs = torch.sigmoid(output_target)  
+                # predicted_probs = torch.sigmoid(output_target)  
+                predicted_probs = output_target
 
                 # Find the best threshold based on the predicted probabilities and true labels
                 best_threshold = find_best_threshold(predicted_probs.cpu().numpy(), label.cpu().numpy())
@@ -192,17 +153,14 @@ def eval(model, dataloader, device, output_path=None, model_to_test='e4s', data=
                 best_thresholds.append(best_threshold)
 
                 # Convert to binary predictions
-                predicted_classes = (predicted_probs >= 0.55).int()
+                predicted_classes = (predicted_probs >= 0.5).int()
 
                 # Save masks for fake images (label == 1)
-                for i in range(image.shape[0]):  # Loop through batch
+                for i in range(image.shape[0]): 
                     if mask_id < nb_mask:
                         if predicted_classes[i].item() == 1:  # Only save masks for fake images
                             filename = f"fake_mask{model_to_test}{data}{batch_idx}{mask_id}.png"
                             visualize_and_save(image[i], output_mask[i], filename, fake_mask_output_dir)
-                        # if label[i].item() == 1:  # Only save masks for fake images
-                        #     filename = f"fake_contour_{batch_idx}_{i}.png"
-                        #     visualize_contour(image[i], output_mask[i], filename, fake_mask_output_dir)
                             mask_id += 1
 
                 # Append predictions and true labels to the lists
@@ -264,7 +222,6 @@ def eval(model, dataloader, device, output_path=None, model_to_test='e4s', data=
 
 def main(args):
     output_path = Path(args.output_path)
-    # Generated images dataset
 
     # Create output folder if it doesn't exist
     os.makedirs(output_path, exist_ok=True)
@@ -299,8 +256,6 @@ def main(args):
 
     # Shuffle the dataset
     filtered_ds = filtered_ds.shuffle(seed=42)  # Set seed for reproducibility
-
-    # print(filtered_ds[:100]["model"])
     list_ds_image = {'all':filtered_ds}
 
     for key, ds_images in list_ds_image.items():

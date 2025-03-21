@@ -162,29 +162,6 @@ class Classifier(pl.LightningModule):
         self.valid_outputs.append(result_dict)
         return result_dict
 
-    # def training_epoch_end(self, train_outputs):
-    #     '''
-    #     Log all the values after the end of the epoch.
-    #     '''
-    #     outputs = [x['result'] for x in train_outputs]
-
-    #     avg_class_loss = torch.stack([x['class_loss'] for x in outputs]).mean()
-    #     avg_mask_loss = torch.stack([x['mask_loss'] for x in outputs]).mean()
-    #     avg_loss = torch.stack([x['total_loss'] for x in outputs]).mean()
-
-    #     all_predictions = torch.stack(
-    #         [x['predictions'] for x in outputs]).flatten()
-    #     all_targets = torch.stack([x['targets'] for x in outputs]).flatten()
-
-    #     class_accuracy = accuracy(all_predictions, all_targets, task="binary")
-    #     class_f1 = f1_score(all_predictions, all_targets, task="binary")
-
-    #     self.log('train_class_loss', avg_class_loss)
-    #     self.log('train_mask_loss', avg_mask_loss)
-    #     self.log('train_loss', avg_loss)
-    #     self.log('train_accuracy', class_accuracy, prog_bar=True)
-    #     self.log('train_f1', class_f1)
-
     def on_train_epoch_end(self):
         '''
         Log all the values after the end of the epoch.
@@ -214,28 +191,6 @@ class Classifier(pl.LightningModule):
 
         self.train_outputs = []  # Clear stored outputs for the next epoch
 
-
-    # def validation_epoch_end(self, outputs):
-    #     '''
-    #     Log all the values after the end of the epoch.
-    #     '''
-
-    #     avg_class_loss = torch.stack([x['class_loss'] for x in outputs]).mean()
-    #     avg_mask_loss = torch.stack([x['mask_loss'] for x in outputs]).mean()
-    #     avg_loss = torch.stack([x['total_loss'] for x in outputs]).mean()
-
-    #     all_predictions = torch.stack(
-    #         [x['predictions'] for x in outputs]).flatten()
-    #     all_targets = torch.stack([x['targets'] for x in outputs]).flatten()
-
-    #     class_accuracy = accuracy(all_predictions, all_targets, task="binary")
-    #     class_f1 = f1_score(all_predictions, all_targets, task="binary")
-
-    #     self.log('valid_class_loss', avg_class_loss)
-    #     self.log('valid_mask_loss', avg_mask_loss)
-    #     self.log('valid_loss', avg_loss)
-    #     self.log('valid_accuracy', class_accuracy, prog_bar=True)
-    #     self.log('valid_f1', class_f1)
 
     def on_validation_epoch_end(self):
         '''
