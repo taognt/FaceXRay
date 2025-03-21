@@ -1,7 +1,10 @@
 import torch
-from .facexray.classifier import Classifier  # Your custom model class
-from .facexray.dataset import transform_img
-from .code.utils import visualize_and_save
+
+import sys
+import os
+
+from facexray.classifier import Classifier 
+from facexray.dataset import transform_img
 from datasets import load_dataset as ds_load_dataset
 import os
 from torchvision import transforms

@@ -31,7 +31,7 @@ from collections import Counter
 
 from facexray.classifier import Classifier
 from facexray.dataset import transform_img, DatasetTest
-from code.utils import visualize_and_save
+from facexrayCode.utils import visualize_and_save
 
 # NVIDIA H100 has Tensor Cores which can improve performance, to enable:
 torch.set_float32_matmul_precision('high')  # 'medium' or 'high' for best speed
