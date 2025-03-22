@@ -41,7 +41,7 @@ download-dataset-val:
 	rm $(FILE_NAME)  # Remove the .zip file
 	@echo "Dataset downloaded and extracted successfully!"
 
-run:
+train:
 	export XLA_FLAGS=--xla_gpu_cuda_data_dir=/usr/local/cuda
 	export TF_ENABLE_ONEDNN_OPTS=0
 	srun --pty --time=$(TIME) --partition=$(PART) --gpus=1 python train_model.py
@@ -59,4 +59,4 @@ save-model:
 test-inference:
 	export XLA_FLAGS=--xla_gpu_cuda_data_dir=/usr/local/cuda
 	export TF_ENABLE_ONEDNN_OPTS=0
-	srun --pty --time=$(TIME) --partition=$(PART) --gpus=1 python test_inference_hf.py
+	srun --pty --time=$(TIME) --partition=$(PART) --gpus=1 python inference_hf.py

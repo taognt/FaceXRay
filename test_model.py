@@ -122,7 +122,7 @@ def eval(model, dataloader, device, output_path=None, model_to_test='e4s', data=
     nb_mask = 10 # nb mask to save per batch
 
     if output_path is not None:
-        log_file_path = os.path.join(output_path, "training_log.txt")
+        log_file_path = os.path.join(output_path, "test_log.txt")
 
     if log_file_path is not None:
         with open(log_file_path, 'a') as log_file:

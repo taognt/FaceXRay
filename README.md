@@ -42,9 +42,9 @@ Point the path to the folder of blended images
 ```
 python train_model.py
 ```
+or
 
-For distributed training
 ```
-python train_model_distributed.py
+make train
 ```
 

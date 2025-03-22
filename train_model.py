@@ -217,6 +217,22 @@ class Classifier(pl.LightningModule):
         self.log('valid_loss', avg_loss)
         self.log('valid_accuracy', class_accuracy, prog_bar=True)
         self.log('valid_f1', class_f1)
+        
+        log_file_path = os.path.join('output_data', "training_log.txt")
+
+        if log_file_path is not None:
+            with open(log_file_path, 'a') as log_file:
+                log_file.write(f'\nvalid_class_loss: {avg_class_loss}\n')
+                log_file.write(f'valid_mask_loss: {avg_mask_loss}\n')
+                log_file.write(f'valid_loss: {avg_loss}\n')
+                log_file.write(f'valid_accuracy: {class_accuracy}\n')
+                log_file.write(f'valid_f1: {class_f1}\n')
+
+        print('valid_class_loss: ', avg_class_loss.item())
+        print('valid_mask_loss: ', avg_mask_loss.item())
+        print('valid_loss: ', avg_loss.item())
+        print('valid_accuracy: ', class_accuracy.item())
+        print('valid_f1: ', class_f1.item())
 
         self.valid_outputs = []  # Clear stored outputs for the next epoch
 
@@ -253,4 +269,4 @@ except:
 trainer.fit(model, train, valid)
 
 #Save and checkpoint
-trainer.save_checkpoint("output_data/final_model.ckpt")
+trainer.save_checkpoint("output_data/final_model_2.ckpt")
